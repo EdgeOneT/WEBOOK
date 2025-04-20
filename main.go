@@ -7,19 +7,22 @@ import (
 	"WEBOOK/internal/web"
 	"WEBOOK/internal/web/middleware"
 	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"net/http"
 	"strings"
 	"time"
 )
 
 func main() {
-	server := initWebService()
-	db := initDB()
-	initUserHandler(db, server)
+	/*	server := initWebService()
+		db := initDB()
+		initUserHandler(db, server)*/
+	server := gin.Default()
+	server.GET("/hello", func(ctx *gin.Context) {
+		ctx.String(http.StatusOK, "你来了")
+	})
 	server.Run(":8080")
 }
 
@@ -34,10 +37,8 @@ func initUserHandler(db *gorm.DB, server *gin.Engine) {
 func initWebService() *gin.Engine {
 	server := gin.Default()
 	server.Use(cors.New(cors.Config{
-		/*		AllowOrigins:     []string{"https://foo.com"},
-				AllowMethods:     []string{"PUT", "PATCH"},
-				ExposeHeaders:    []string{"Content-Length"},*/
-		AllowHeaders:     []string{"Content-Type"},
+		ExposeHeaders:    []string{"x-jwt-token"},
+		AllowHeaders:     []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
 		AllowOriginFunc: func(origin string) bool {
 			if strings.HasPrefix(origin, "http://localhost") {
@@ -53,11 +54,12 @@ func initWebService() *gin.Engine {
 			println("这是我的 Middleware")
 		})
 
-	login := &middleware.LoginMiddlewareBuilder{}
+	login := &middleware.LoginJWTMiddlewareBuilder{}
 	// 存储数据的，也就是你 userId 存哪里
 	// 直接存 cookie
-	store := cookie.NewStore([]byte("secret"))
-	server.Use(sessions.Sessions("mysession", store), login.CheckLogin())
+	//store := cookie.NewStore([]byte("secret"))
+	//server.Use(sessions.Sessions("mysession", store), login.CheckLogin())
+	server.Use(login.CheckLogin())
 	return server
 
 }
@@ -72,4 +74,9 @@ func initDB() *gorm.DB {
 		panic(err)
 	}
 	return db
+}
+
+func useJWT(server *gin.Engine) {
+	login := middleware.LoginJWTMiddlewareBuilder{}
+	server.Use(login.CheckLogin())
 }

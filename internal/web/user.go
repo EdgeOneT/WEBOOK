@@ -6,7 +6,9 @@ import (
 	regexp "github.com/dlclark/regexp2"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"net/http"
+	"time"
 )
 
 const (
@@ -31,7 +33,7 @@ func NewUserHandler(svc *service.UserService) *UserHandler {
 
 func (u *UserHandler) UserRegister(server *gin.Engine) {
 	server.POST("/users/signup", u.SignUp)
-	server.POST("/users/login", u.Login)
+	server.POST("/users/login", u.LoginJWT)
 	server.POST("/users/edit", u.Edit)
 	server.GET("/users/profile", u.Profile)
 }
@@ -98,8 +100,8 @@ func (u *UserHandler) Login(ctx *gin.Context) {
 		sess := sessions.Default(ctx)
 		sess.Set("userId", user.Id)
 		sess.Options(sessions.Options{
-			// 十五分钟
-			MaxAge: 900,
+			//1分钟
+			MaxAge: 60,
 		})
 		err = sess.Save()
 		if err != nil {
@@ -114,10 +116,52 @@ func (u *UserHandler) Login(ctx *gin.Context) {
 	}
 }
 
+func (u *UserHandler) LoginJWT(ctx *gin.Context) {
+	type Req struct {
+		Email    string
+		Password string
+	}
+	var req Req
+	if err := ctx.Bind(&req); err != nil {
+		return
+	}
+	user, err := u.svc.Login(ctx, req.Email, req.Password)
+	switch err {
+	case nil:
+		uc := UserClaims{
+			Uid:       user.Id,
+			UserAgent: ctx.GetHeader("User-Agent"),
+			RegisteredClaims: jwt.RegisteredClaims{
+				// 1分钟过期
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 5)),
+			},
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS512, uc)
+		tokenStr, err := token.SignedString(JWTKey)
+		if err != nil {
+			ctx.String(http.StatusOK, "系统错误")
+		}
+		ctx.Header("x-jwt-token", tokenStr)
+		ctx.String(http.StatusOK, "登录成功")
+	case service.ErrInvalidUserOrPassword:
+		ctx.String(http.StatusOK, "用户名或者密码不对")
+	default:
+		ctx.String(http.StatusOK, "系统错误")
+	}
+}
+
 func (u *UserHandler) Edit(ctx *gin.Context) {
 
 }
 
 func (u *UserHandler) Profile(ctx *gin.Context) {
 	ctx.String(http.StatusOK, "成功")
+}
+
+var JWTKey = []byte("k6CswdUm77WKcbM68UQUuxVsHSpTCwgK")
+
+type UserClaims struct {
+	jwt.RegisteredClaims
+	Uid       int64
+	UserAgent string
 }

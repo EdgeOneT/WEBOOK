@@ -1,0 +1,14 @@
+# pvc -> PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: webook-mysql-claim
+spec:
+  # 可以随便
+  storageClassName: suibian
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # 1GB
+      storage: 1Gi
