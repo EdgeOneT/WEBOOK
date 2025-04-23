@@ -1,13 +1,16 @@
 package main
 
 import (
+	"WEBOOK/config"
 	"WEBOOK/internal/respository"
 	"WEBOOK/internal/respository/dao"
 	"WEBOOK/internal/service"
 	"WEBOOK/internal/web"
 	"WEBOOK/internal/web/middleware"
+	"WEBOOK/pkg/ginx/middlerware/ratelimit"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"net/http"
@@ -16,10 +19,10 @@ import (
 )
 
 func main() {
-	/*	server := initWebService()
-		db := initDB()
-		initUserHandler(db, server)*/
-	server := gin.Default()
+	server := initWebService()
+	db := initDB()
+	initUserHandler(db, server)
+	//server := gin.Default()
 	server.GET("/hello", func(ctx *gin.Context) {
 		ctx.String(http.StatusOK, "你来了")
 	})
@@ -54,18 +57,21 @@ func initWebService() *gin.Engine {
 			println("这是我的 Middleware")
 		})
 
-	login := &middleware.LoginJWTMiddlewareBuilder{}
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: config.Config.Redis.Addr,
+	})
 	// 存储数据的，也就是你 userId 存哪里
 	// 直接存 cookie
 	//store := cookie.NewStore([]byte("secret"))
 	//server.Use(sessions.Sessions("mysession", store), login.CheckLogin())
-	server.Use(login.CheckLogin())
+	server.Use(ratelimit.NewBuilder(redisClient, time.Second, 1).Build())
+	useJWT(server)
 	return server
 
 }
 
 func initDB() *gorm.DB {
-	db, err := gorm.Open(mysql.Open("root:root@tcp(localhost:13316)/webook"))
+	db, err := gorm.Open(mysql.Open(config.Config.DB.DSN))
 	if err != nil {
 		panic(err)
 	}
